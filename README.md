@@ -10,7 +10,7 @@ The code was developed using python3.4. It and later versions of python are supp
 - numpy (conda, pip)
 
 ## Other:
-- scamper by Matthew Luckie (for sc_warts2json) if working with traceroute files
+- [scamper](https://www.caida.org/tools/measurement/scamper/) by Matthew Luckie (for sc_warts2json) if working with traceroute files
 - gzip/bzip2 if using compressed files
 
 # INSTRUCTIONS
