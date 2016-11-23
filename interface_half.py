@@ -4,7 +4,9 @@ IH = namedtuple('InterfaceHalf', ['address', 'otherside', 'direction', 'asn', 'o
 
 
 class InterfaceHalf:
-    '''An interface half (the interface in either the forward or backward direction)'''
+    """
+    An interface half (the interface in either the forward or backward direction)
+    """
 
     __slots__ = (
         'address', 'otherhalf', 'otherside', 'asn', 'org', 'direction', 'neighbors', 'identifier', 'hash_value',

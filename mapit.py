@@ -1,7 +1,6 @@
 import bz2
 import gzip
 import json
-import pandas as pd
 import socket
 import struct
 import sys
@@ -13,6 +12,7 @@ from logging import getLogger, StreamHandler, INFO
 from subprocess import Popen, PIPE
 
 import numpy as np
+import pandas as pd
 from radix import Radix
 
 from algorithm import algorithm
@@ -105,7 +105,9 @@ def create_adjacencies(fregex):
     log.info('Number of files to read: {:,d}'.format(len(files)))
     for i, filename in enumerate(files, 0):
         if log.getEffectiveLevel() == INFO:
-            sys.stderr.write('\r\033[K{:,d} / {:,d} ({:.2%}) Adjacencies {:,d} Addresses {:,d} Reading {}'.format(i, len(files), i / len(files), len(adjacencies), len(addresses), filename))
+            sys.stderr.write(
+                '\r\033[K{:,d} / {:,d} ({:.2%}) Adjacencies {:,d} Addresses {:,d} Reading {}'.format(
+                    i, len(files), i / len(files), len(adjacencies), len(addresses), filename))
         with Warts(filename) as f:
             for line in f:
                 j = json.loads(line)
@@ -115,7 +117,8 @@ def create_adjacencies(fregex):
                         trace = extract_trace(j)
                         if cycle_free(trace):
                             adjacencies.update((x, y) for x, y in zip(trace, trace[1:]) if x and y)
-    log.info('\r\033[KAdjacencies \r\033[K{:,d} / {:,d} ({:.2%}) Adjacencies {:,d} Addresses {:,d}'.format(len(files), len(files), 1, len(adjacencies), len(addresses)))
+    log.info('\r\033[KAdjacencies \r\033[K{:,d} / {:,d} ({:.2%}) Adjacencies {:,d} Addresses {:,d}'.format(
+        len(files), len(files), 1, len(adjacencies), len(addresses)))
     return adjacencies, addresses
 
 
@@ -147,27 +150,25 @@ def determine_otherside(address, all_interfaces):
 
 def main():
     parser = ArgumentParser()
-    trace_group = parser.add_mutually_exclusive_group()
-    trace_group.add_argument('-t', '--traces', dest='traces',
-                             help='Warts traceroute files as Unix regex (can be warts.gz or warts.bz2)')
-    trace_group.add_argument('-a', '--adjacencies', dest='adjacencies', help='Adjacencies derived from traceroutes')
-    parser.add_argument('--trace-exit', dest='trace_exit', type=FileType('w'),
-                        help='Extract adjacencies and addresses from the traceroutes and exit')
-    parser.add_argument('-c', '--addresses', dest='addresses', help='List of addresses')
-    parser.add_argument('--addresses-exit', dest='addresses_exit', type=FileType('w'),
-                        help='Extract addresses from traces and exit.')
+    parser.add_argument('-a', '--adjacencies', dest='adjacencies', help='Adjacencies derived from traceroutes')
     parser.add_argument('-b', '--bgp', dest='bgp', help='BGP prefixes')
+    parser.add_argument('-c', '--addresses', dest='addresses', help='List of addresses')
+    parser.add_argument('-f', '--factor', dest='factor', type=float, default='0', help='Factor used in the paper')
+    parser.add_argument('-i', '--interfaces', dest='interfaces', help='Interface information')
+    parser.add_argument('-o', '--as2org', dest='as2org', help='AS2ORG mappings')
+    parser.add_argument('-p', '--providers', dest='providers', help='List of ISP ASes')
+    parser.add_argument('-t', '--traces', dest='traces',
+                        help='Warts traceroute files as Unix regex (can be warts.gz or warts.bz2)')
+    parser.add_argument('-v', dest='verbose', action='count', default=0, help='Increase verbosity for each v')
+    parser.add_argument('-w', '--output', dest='output', type=FileType('w'), default='-', help='Output filename')
     parser.add_argument('-x', '--ixp-asns', dest='ixp_asns', help='IXP ASNs')
     parser.add_argument('-y', '--ixp-prefixes', dest='ixp_prefixes', help='IXP prefixes')
-    parser.add_argument('-o', '--as2org', dest='as2org', help='AS2ORG mappings')
-    parser.add_argument('-v', dest='verbose', action='count', default=0, help='Increase verbosity for each v')
+    parser.add_argument('--addresses-exit', dest='addresses_exit', type=FileType('w'),
+                        help='Extract addresses from traces and exit.')
     parser.add_argument('--interface-exit', dest='interface_exit', type=FileType('w'),
                         help='Extract interface info and exit')
-    parser.add_argument('-i', '--interfaces', dest='interfaces', help='Interface information')
-    parser.add_argument('-p', '--providers', dest='providers', help='List of ISP ASes')
-    parser.add_argument('-f', '--factor', dest='factor', type=float, default='0', help='Factor used in the paper')
-    parser.add_argument('-w', '--output', dest='output', type=FileType('w'), default='-', help='Output filename')
-    parser.add_argument('--fix-asn', dest='fix_asn', action='store_true', help='Fix ASNs with underscores (CAIDA BGP)')
+    parser.add_argument('--trace-exit', dest='trace_exit', type=FileType('w'),
+                        help='Extract adjacencies and addresses from the traceroutes and exit')
     args = parser.parse_args()
 
     log.setLevel(max((3 - args.verbose) * 10, 10))
@@ -228,10 +229,6 @@ def main():
                         ixp_radix.add(address, int(prefixlen))
                     else:
                         bgp_radix.add(address, int(prefixlen)).data['asn'] = asn
-                    # if asn in ixp_asns:
-                    #     ixp_radix.add(address + '/' + prefixlen)
-                    # else:
-                    #     bgp_radix.add(address + '/' + prefixlen).data['asn'] = asn
                 except ValueError:
                     log.debug('{} cannot be converted to int'.format(asn))
         bgp_radix.add('0.0.0.0/0').data['asn'] = 0
@@ -243,13 +240,15 @@ def main():
         else:
             as2org = None
         unique_interfaces = {u for u, _ in adjacencies} | {v for _, v in adjacencies}
-        asns = {address: -2 if ixp_radix.search_best(address) else bgp_radix.search_best(address).data['asn'] for address in
+        asns = {address: -2 if ixp_radix.search_best(address) else bgp_radix.search_best(address).data['asn'] for
+                address in
                 unique_interfaces if not private_radix.search_best(address)}
         orgs = {address: as2org.get(asn, asn) for address, asn in asns.items()} if as2org else asns
         othersides = {address: determine_otherside(address, addresses) for address in asns}
         if args.interface_exit:
             df = pd.DataFrame.from_dict({'Otherside': othersides, 'ASN': asns, 'Org': orgs}).rename_axis('Address')
             df.to_csv(args.interface_exit)
+            sys.exit(0)
     halves_dict = {
         (address, direction): InterfaceHalf(address, asns[address], orgs[address], direction, othersides[address])
         for (address, direction) in neighbors if address in asns
@@ -257,7 +256,8 @@ def main():
     for (address, direction), half in halves_dict.items():
         half.set_otherhalf(halves_dict.get((address, not direction)))
         half.set_otherside(halves_dict.get((half.otherside_address, not direction)))
-        half.set_neighbors([halves_dict[(neighbor, not direction)] for neighbor in neighbors[(address, direction)] if neighbor in asns])
+        half.set_neighbors([halves_dict[(neighbor, not direction)] for neighbor in neighbors[(address, direction)] if
+                            neighbor in asns])
     allhalves = list(halves_dict.values())
     if args.providers:
         with FileWrapper(args.providers) as f:

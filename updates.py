@@ -3,17 +3,16 @@ from copy import copy
 
 import pandas as pd
 
-UpdateInfo = namedtuple('Update',
-                        ['Address', 'Direction', 'Otherside', 'ASN', 'ConnASN', 'Org', 'ConnOrg', 'Direct', 'Certain',
-                         'Stub'])
+UpdateInfo = namedtuple(
+    'Update', ['Address', 'Direction', 'Otherside', 'ASN', 'ConnASN', 'Org', 'ConnOrg', 'Direct', 'Certain', 'Stub'])
 
 
 class Updates:
-    def __init__(self, orgs={}, asns={}, direct=set(), stubs=set()):
-        self.orgs = orgs
-        self.asns = asns
-        self.direct = direct
-        self.stubs = stubs
+    def __init__(self, orgs=None, asns=None, direct=None, stubs=None):
+        self.orgs = {} if orgs is None else orgs
+        self.asns = {} if asns is None else asns
+        self.direct = set() if direct is None else direct
+        self.stubs = set() if stubs is None else stubs
 
     def __contains__(self, half):
         return half in self.orgs
@@ -71,10 +70,11 @@ class Updates:
 
     def iteritems(self):
         for half, asn in self.asns.items():
-            yield UpdateInfo(Address=half.address, Direction=half.direction,
-                             Otherside=half.otherside_address if half.asn != -2 else None,
-                             ASN=half.asn, ConnASN=asn, Org=half.org, ConnOrg=self.orgs[half],
-                             Direct=half in self.direct, Certain=self.iscertain(half), Stub=half in self.stubs)
+            yield UpdateInfo(
+                Address=half.address, Direction=half.direction,
+                Otherside=half.otherside_address if half.asn != -2 else None, ASN=half.asn, ConnASN=asn, Org=half.org,
+                ConnOrg=self.orgs[half], Direct=half in self.direct, Certain=self.iscertain(half),
+                Stub=half in self.stubs)
 
     def mapping(self, half):
         return self.asns[half], self.orgs[half]
@@ -85,7 +85,7 @@ class Updates:
     def org_default(self, half, default=None):
         return self.orgs.get(half, default)
 
-    def remove(self, half, otherside=False):
+    def remove(self, half):
         if half in self:
             del self.asns[half]
             del self.orgs[half]
@@ -94,8 +94,10 @@ class Updates:
     def update(self, half, asn, org, isdirect=True, isstub=False):
         self.asns[half] = asn
         self.orgs[half] = org
-        if isdirect: self.direct.add(half)
-        if isstub: self.stubs.add(half)
+        if isdirect:
+            self.direct.add(half)
+        if isstub:
+            self.stubs.add(half)
 
     def update_from_half(self, half, other, isdirect=False):
         self.update(half, self.asns[other], self.orgs[other], isdirect)
