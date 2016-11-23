@@ -156,7 +156,7 @@ def main():
     parser.add_argument('-f', '--factor', dest='factor', type=float, default='0', help='Factor used in the paper')
     parser.add_argument('-i', '--interfaces', dest='interfaces', help='Interface information')
     parser.add_argument('-o', '--as2org', dest='as2org', help='AS2ORG mappings')
-    parser.add_argument('-p', '--providers', dest='providers', help='List of ISP ASes')
+    # parser.add_argument('-p', '--asn-providers', dest='providers', help='List of ISP ASes')
     parser.add_argument('-t', '--traces', dest='traces',
                         help='Warts traceroute files as Unix regex (can be warts.gz or warts.bz2)')
     parser.add_argument('-v', dest='verbose', action='count', default=0, help='Increase verbosity for each v')
@@ -169,6 +169,9 @@ def main():
                         help='Extract interface info and exit')
     parser.add_argument('--trace-exit', dest='trace_exit', type=FileType('w'),
                         help='Extract adjacencies and addresses from the traceroutes and exit')
+    providers_group = parser.add_mutually_exclusive_group()
+    providers_group.add_argument('-p', '--asn-providers', dest='asn_providers', help='List of ISP ASes')
+    providers_group.add_argument('-q', '--org-providers', dest='org_providers', help='List of ISP ORGs')
     args = parser.parse_args()
 
     log.setLevel(max((3 - args.verbose) * 10, 10))
@@ -259,12 +262,15 @@ def main():
         half.set_neighbors([halves_dict[(neighbor, not direction)] for neighbor in neighbors[(address, direction)] if
                             neighbor in asns])
     allhalves = list(halves_dict.values())
-    if args.providers:
+    if args.asn_providers:
         with FileWrapper(args.providers) as f:
             providers = {int(asn.strip()) for asn in f}
+    elif args.org_providers:
+        with FileWrapper(args.providers) as f:
+            providers = {asn.strip() for asn in f}
     else:
         providers = None
-    updates = algorithm(allhalves, threshold=args.factor, providers=providers)
+    updates = algorithm(allhalves, factor=args.factor, providers=providers)
     updates.write(args.output)
 
 

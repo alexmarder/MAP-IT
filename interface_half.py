@@ -17,7 +17,7 @@ class InterfaceHalf:
         self.otherhalf = None
         self.otherside = None
         self.asn = asn
-        self.org = org
+        self.org = str(org)
         self.direction = direction
         self.otherside_address = otherside
         self.neighbors = None

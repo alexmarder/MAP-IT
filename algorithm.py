@@ -156,9 +156,17 @@ def remove_borders(updates, threshold):
     return new_updates
 
 
-def remove_step(updates, threshold):
+def remove_step(updates, factor):
+    """
+    The remove step discards inferences which no longer appear valid.
+
+    This step will continue until there are no changes left to be made.
+    :param updates: Updates object with current inferences
+    :param factor: 0 <= factor <= 1
+    :return: Updates object without discarded inferences
+    """
     while True:
-        new_updates = remove_borders(updates, threshold)
+        new_updates = remove_borders(updates, factor)
         log.info('Remove: {:,d} inferences'.format(len(new_updates)))
         if updates == new_updates:
             return updates
@@ -166,10 +174,27 @@ def remove_step(updates, threshold):
 
 
 def stub_heuristic(allhalves, updates, providers):
+    """
+    Infers ISP->Stub links when the stub AS responds with only a single address following the link.
+
+    Here, we assume that links from an ISP to a stub AS are typically assigned from the ISP's address space.
+    There are two primary reasons for this heuristic. The first is that in our experiments only a single stub AS address
+    appeared following an ISP link. The second is that we are no longer concerned about third party addresses because a
+    stub AS can't appear as a third party address. This heuristic can increase the coverage by allowing MAP-IT to infer
+    links with only a single neighbor.
+    :param allhalves: All InterfaceHalf objects
+    :param updates: The current Update object after completing the main loop which will be directly modified
+    :param providers: Set of ISP ASNs
+    """
     for half in allhalves:
+        # Only need to look at IHs in forward direction with a single neighbor
         if half.direction and half.num_neighbors == 1:
+            # If not inference for half and it's other half
+            # If it has an IP2AS mapping
             if half not in updates and half.otherhalf not in updates and half.asn != 0:
                 neighbor = half.neighbors[0]
+                # If the neighbor has an IP2AS mapping and is not the same ORG as the half
+                # If there is no inference for the neighbor and the neighbor is not an ISP
                 if neighbor.asn > 0 and neighbor.org != half.org and neighbor not in updates and (
                                 neighbor.asn not in providers and neighbor.org not in providers):
                     updates.update(half, neighbor.asn, neighbor.org, isdirect=True, isstub=True)
@@ -177,15 +202,22 @@ def stub_heuristic(allhalves, updates, providers):
                         updates.update(half.otherside, neighbor.asn, neighbor.org, isdirect=False, isstub=True)
 
 
-def algorithm(allhalves, threshold=0.5, providers=None):
+def algorithm(allhalves, factor=0.5, providers=None):
+    """
+    The main MAP-IT algorithm, with the main loop which calls the add step and the remove step.
+    :param allhalves: All InterfaceHalf objects created from the traceroutes, including those with 1 neighbor
+    :param factor: 0 <= factor <= 1
+    :param providers: Set of ISP ASNs
+    :return: Updates object with the final set of inter-AS links
+    """
     previous_updates = []
     updates = Updates()
     halves = [half for half in allhalves if half.num_neighbors > 1]
     iteration = 0
     while True:
         log.info('***** Iteration {} *****'.format(iteration))
-        updates = add_step(halves, updates, threshold)
-        updates = remove_step(updates, threshold)
+        updates = add_step(halves, updates, factor)
+        updates = remove_step(updates, factor)
         if updates in previous_updates:
             if providers is not None:
                 stub_heuristic(allhalves, updates, providers)

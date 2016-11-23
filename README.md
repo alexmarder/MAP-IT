@@ -70,10 +70,11 @@ There are several options, some combination of which is required.
 - For more information, please see the paper
 
 ### Providers
-- The -p <filename> option specifies a file with a list of ISP ASNs
+- The -p <filename> option specifies a file with a list of ISP ASNs (will be converted to ints)
+- The -q <filename> option specified a file with a list of ISP ORGs (will not be converted to ints)
+- The -p and -q options are mutually exclusive and should not be used at the same time
 - This is used with the ISP->Stub heuristic
-- The list must be AS numbers, not ORG identifiers
-- It is not required to specify a list of ISP ASNs, but if no file is provided then the heuristic will not be used, which will likely reduce coverage
+- It is not required to specify a list of ISPs, but if neither option is supplied then the heuristic will not be used, which will likely reduce coverage
 
 ### Results
 - The -w <filename> option can be used to specify the output file for the CSV containing the inter-AS link interfaces (use - for stdout)
