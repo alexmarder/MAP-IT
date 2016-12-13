@@ -8,10 +8,11 @@ from argparse import ArgumentParser, FileType
 from collections import defaultdict
 from glob import glob
 from itertools import chain
+from ipyparallel import Client
 from logging import getLogger, StreamHandler, INFO
 from subprocess import Popen, PIPE
 
-import numpy as np
+import numpy
 import pandas as pd
 from radix import Radix
 
@@ -86,7 +87,7 @@ def cycle_free(trace):
 
 
 def extract_trace(j):
-    trace = np.full(j['hop_count'], fill_value=None, dtype='object')
+    trace = numpy.full(j['hop_count'], fill_value=None, dtype='object')
     for hop in j['hops']:
         if 'icmp_q_ttl' not in hop or hop['icmp_q_ttl'] == 1:
             ttl = hop['probe_ttl'] - 1
@@ -98,28 +99,53 @@ def extract_trace(j):
     return trace
 
 
-def create_adjacencies(fregex):
+def process_trace_file(filename):
+    addresses = set()
+    adjacencies = set()
+    with Warts(filename) as f:
+        for line in f:
+            j = json.loads(line)
+            if 'hops' in j:
+                addresses.update(hop['addr'] for hop in j['hops'])
+                if j['stop_reason'] != 'LOOP':
+                    trace = extract_trace(j)
+                    if cycle_free(trace):
+                        adjacencies.update((x, y) for x, y in zip(trace, trace[1:]) if x and y)
+    return adjacencies, addresses
+
+
+def create_adjacencies(fregex, lv=None):
     adjacencies = set()
     addresses = set()
     files = glob(fregex)
-    log.info('Number of files to read: {:,d}'.format(len(files)))
-    for i, filename in enumerate(files, 0):
-        if log.getEffectiveLevel() == INFO:
-            sys.stderr.write(
-                '\r\033[K{:,d} / {:,d} ({:.2%}) Adjacencies {:,d} Addresses {:,d} Reading {}'.format(
-                    i, len(files), i / len(files), len(adjacencies), len(addresses), filename))
-        with Warts(filename) as f:
-            for line in f:
-                j = json.loads(line)
-                if 'hops' in j:
-                    addresses.update(hop['addr'] for hop in j['hops'])
-                    if j['stop_reason'] != 'LOOP':
-                        trace = extract_trace(j)
-                        if cycle_free(trace):
-                            adjacencies.update((x, y) for x, y in zip(trace, trace[1:]) if x and y)
-    log.info('\r\033[KAdjacencies \r\033[K{:,d} / {:,d} ({:.2%}) Adjacencies {:,d} Addresses {:,d}'.format(
-        len(files), len(files), 1, len(adjacencies), len(addresses)))
+    msg = '\r\033[K{:,d} / {:,d} ({:.2%}) Adjacencies {:,d} Addresses {:,d}'
+    if log.getEffectiveLevel() >= INFO:
+        log.info(msg.format(0, len(files), 0, 0, 0))
+    results = lv.map_async(process_trace_file, files) if lv else map(process_trace_file, files)
+    for i, (new_adjacencies, new_addresses) in enumerate(results, 1):
+        adjacencies.update(new_adjacencies)
+        addresses.update(new_addresses)
+        if log.getEffectiveLevel() >= INFO:
+            sys.stderr.write(msg.format(i, len(files), i / len(files), len(adjacencies), len(addresses)))
+    if log.getEffectiveLevel() >= INFO:
+        sys.stderr.write('\n')
     return adjacencies, addresses
+
+
+def setup_parallel():
+    rc = Client()
+    dv = rc[:]
+    with dv.sync_imports():
+        import json
+        import numpy
+    # dv['json'] = json
+    dv['Popen'] = Popen
+    dv['PIPE'] = PIPE
+    dv['Warts'] = Warts
+    dv['extract_trace'] = extract_trace
+    dv['cycle_free'] = cycle_free
+    lv = rc.load_balanced_view()
+    return dv, lv
 
 
 def determine_otherside(address, all_interfaces):
@@ -156,6 +182,7 @@ def main():
     parser.add_argument('-f', '--factor', dest='factor', type=float, default='0', help='Factor used in the paper')
     parser.add_argument('-i', '--interfaces', dest='interfaces', help='Interface information')
     parser.add_argument('-o', '--as2org', dest='as2org', help='AS2ORG mappings')
+    parser.add_argument('-m', '--pool', dest='pool', help='Number of processes to use')
     # parser.add_argument('-p', '--asn-providers', dest='providers', help='List of ISP ASes')
     parser.add_argument('-t', '--traces', dest='traces',
                         help='Warts traceroute files as Unix regex (can be warts.gz or warts.bz2)')
@@ -182,8 +209,14 @@ def main():
 
     addresses = set()
 
+    if args.pool:
+        dv, lv = setup_parallel()
+    else:
+        dv = None
+        lv = None
+
     if args.traces:
-        adjacencies, addresses = create_adjacencies(args.traces)
+        adjacencies, addresses = create_adjacencies(args.traces, lv=lv)
         if args.trace_exit:
             log.info('Writing adjacencies to {}'.format(args.trace_exit))
             args.trace_exit.writelines('{}\t{}\n'.format(x, y) for x, y in sorted(adjacencies))
