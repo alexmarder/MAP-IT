@@ -198,6 +198,7 @@ def main():
     parser.add_argument('--trace-exit', dest='trace_exit', type=FileType('w'),
                         help='Extract adjacencies and addresses from the traceroutes and exit')
     providers_group = parser.add_mutually_exclusive_group()
+    providers_group.add_argument('-r', '--rel-graph', dest='rel_graph', help='CAIDA relationship graph')
     providers_group.add_argument('-p', '--asn-providers', dest='asn_providers', help='List of ISP ASes')
     providers_group.add_argument('-q', '--org-providers', dest='org_providers', help='List of ISP ORGs')
     parser.add_argument('--bgp-compression', dest='bgp_compression', choices=['infer', 'gzip', 'bzip2'], default='infer', help='Compression passed to pandas read_table')
@@ -270,6 +271,9 @@ def main():
     elif args.org_providers:
         with FileWrapper(args.providers) as f:
             providers = {asn.strip() for asn in f}
+    elif args.rel_graph:
+        rels = pd.read_csv(args.rel_graph, sep='|', comment='#', names=['AS1', 'AS2', 'Rel'], usecols=[0, 1, 2])
+        providers = set(rels[rels.Rel == -1].AS1.unique())
     else:
         providers = None
     updates = algorithm(allhalves, factor=args.factor, providers=providers)
