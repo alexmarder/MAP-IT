@@ -18,6 +18,7 @@ from radix import Radix
 
 from algorithm import algorithm
 from interface_half import InterfaceHalf
+from routing_table import create_routing_table
 
 PRIVATE4 = ['0.0.0.0/8', '10.0.0.8/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12',
             '192.0.0.0/24', '192.0.2.0/24', '192.31.196.0/24', '192.52.193.0/24', '192.88.99.0/24', '192.168.0.0/16',
@@ -199,13 +200,10 @@ def main():
     providers_group = parser.add_mutually_exclusive_group()
     providers_group.add_argument('-p', '--asn-providers', dest='asn_providers', help='List of ISP ASes')
     providers_group.add_argument('-q', '--org-providers', dest='org_providers', help='List of ISP ORGs')
+    parser.add_argument('--bgp-compression', dest='bgp_compression', choices=['infer', 'gzip', 'bzip2'], default='infer', help='Compression passed to pandas read_table')
     args = parser.parse_args()
 
     log.setLevel(max((3 - args.verbose) * 10, 10))
-
-    private_radix = Radix()
-    ixp_radix = Radix()
-    bgp_radix = Radix()
 
     addresses = set()
 
@@ -242,43 +240,14 @@ def main():
         asns, orgs, othersides = df['ASN', 'Org', 'Otherside'].to_dict('records')
     else:
         addresses = {struct.unpack("!L", socket.inet_aton(addr.strip()))[0] for addr in addresses}
-        if args.ixp_asns:
-            with open(args.ixp_asns) as f:
-                ixp_asns = {int(asn.strip()) for asn in f}
-        else:
-            ixp_asns = {}
-        log.info('IXP ASNs: {:,d}'.format(len(ixp_asns)))
-        if args.ixp_prefixes:
-            with open(args.ixp_prefixes) as f:
-                for prefix in f:
-                    ixp_radix.add(prefix)
-        log.info('IXP Prefixes: {:,d}'.format(len(ixp_radix.prefixes())))
-        for ip in chain(PRIVATE4, PRIVATE6):
-            private_radix.add(ip)
-        with FileWrapper(args.bgp) as f:
-            for line in f:
-                address, prefixlen, asn = line.split()
-                try:
-                    # asn = int(asn.partition('_')[0] if '_' in asn else asn)
-                    asn = int(asn)
-                    if asn in ixp_asns:
-                        ixp_radix.add(address, int(prefixlen))
-                    else:
-                        bgp_radix.add(address, int(prefixlen)).data['asn'] = asn
-                except ValueError:
-                    log.debug('{} cannot be converted to int'.format(asn))
-        bgp_radix.add('0.0.0.0/0').data['asn'] = 0
-        log.info('IXP Prefixes: {:,d}'.format(len(ixp_radix.prefixes())))
-        log.info('BGP Prefixes: {:,d}'.format(len(bgp_radix.prefixes())))
-        if args.as2org:
-            with FileWrapper(args.as2org) as f:
-                as2org = {int(asn): org for asn, org in map(str.split, f)}
-        else:
-            as2org = None
+        ip2as = create_routing_table(args.bgp, args.ixp_prefixes, args.ixp_asns, bgp_compression=args.bgp_compression)
+        as2org = pd.read_csv(args.as2org, index_col='ASN').Org.to_dict() if args.as2org else None
         unique_interfaces = {u for u, _ in adjacencies} | {v for _, v in adjacencies}
-        asns = {address: -2 if ixp_radix.search_best(address) else bgp_radix.search_best(address).data['asn'] for
-                address in
-                unique_interfaces if not private_radix.search_best(address)}
+        asns = {}
+        for address in unique_interfaces:
+            asn = ip2as[address]
+            if asn != -1:
+                asns[address] = asn
         orgs = {address: as2org.get(asn, asn) for address, asn in asns.items()} if as2org else asns
         othersides = {address: determine_otherside(address, addresses) for address in asns}
         if args.interface_exit:
