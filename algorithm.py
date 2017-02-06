@@ -213,15 +213,19 @@ def algorithm(allhalves, factor=0.5, providers=None):
     previous_updates = []
     updates = Updates()
     halves = [half for half in allhalves if half.num_neighbors > 1]
+    if not halves:
+        log.warning('The interface graph is too sparse. No interface has more than one neighbor in the forward or backward direction.')
+        log.warning('Only applying the stub heuristic.')
     iteration = 0
     while True:
         log.info('***** Iteration {} *****'.format(iteration))
         updates = add_step(halves, updates, factor)
         updates = remove_step(updates, factor)
         if updates in previous_updates:
-            if providers is not None:
-                stub_heuristic(allhalves, updates, providers)
-                log.info('Stubs Heuristic: Added {:,d} Total {:,d}'.format(len(updates.stubs), len(updates)))
-            return updates
+            break
         previous_updates.append(updates)
         iteration += 1
+    if providers is not None:
+        stub_heuristic(allhalves, updates, providers)
+        log.info('Stubs Heuristic: Added {:,d} Total {:,d}'.format(len(updates.stubs), len(updates)))
+    return updates

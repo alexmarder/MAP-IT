@@ -1,10 +1,14 @@
 from collections import namedtuple
 from copy import copy
+from logging import getLogger
 
 import pandas as pd
 
+log = getLogger()
+
+columns = ['Address', 'Direction', 'Otherside', 'ASN', 'ConnASN', 'Org', 'ConnOrg', 'Direct', 'Certain', 'Stub']
 UpdateInfo = namedtuple(
-    'Update', ['Address', 'Direction', 'Otherside', 'ASN', 'ConnASN', 'Org', 'ConnOrg', 'Direct', 'Certain', 'Stub'])
+    'Update', columns)
 
 
 class Updates:
@@ -45,7 +49,11 @@ class Updates:
         return Updates(copy(self.orgs), copy(self.asns), copy(self.direct), copy(self.stubs))
 
     def dataframe(self):
-        return pd.DataFrame(self.iteritems()).set_index(['Address', 'Direction']).sort_index()
+        if len(self) > 0:
+            return pd.DataFrame(self.iteritems()).set_index(['Address', 'Direction']).sort_index()
+        else:
+            log.warning('There were no inferences made. This is likely because the interface graph is too sparse.')
+            return pd.DataFrame(columns=columns)
 
     def difference(self, other):
         for k in self.orgs.keys() | other.orgs.keys():
