@@ -1,5 +1,3 @@
-import bz2
-import gzip
 import json
 import socket
 import struct
@@ -7,18 +5,18 @@ import sys
 from argparse import ArgumentParser, FileType
 from collections import defaultdict
 from glob import glob
-from itertools import chain
-from ipyparallel import Client
-from logging import getLogger, StreamHandler, INFO
+from logging import getLogger, StreamHandler
 from subprocess import Popen, PIPE
 
 import numpy
 import pandas as pd
-from radix import Radix
 
 from algorithm import algorithm
 from interface_half import InterfaceHalf
+from progress import Progress
 from routing_table import create_routing_table
+from trace import Warts, extract_trace, cycle_free, process_trace_file
+from utils import File2, create_cluster, setup_parallel, stop_cluster
 
 PRIVATE4 = ['0.0.0.0/8', '10.0.0.8/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12',
             '192.0.0.0/24', '192.0.2.0/24', '192.31.196.0/24', '192.52.193.0/24', '192.88.99.0/24', '192.168.0.0/16',
@@ -29,124 +27,36 @@ PRIVATE6 = ['::1/128', '::/128', '::ffff:0:0/96', '64:ff9b::/96', '100::/64', '2
             '2001:db8::/32', '2002::/16', '2620:4f:8000::/48', 'fc00::/7', 'fe80::/10']
 
 log = getLogger()
-ch = StreamHandler(sys.stderr)
-log.addHandler(ch)
+if not log.hasHandlers():
+    ch = StreamHandler(sys.stderr)
+    log.addHandler(ch)
 
 
-class FileWrapper:
-    def __init__(self, filename, read=True):
-        self.filename = filename
-        self.read = read
-
-    def __enter__(self):
-        ftype = self.filename.rpartition('.')[2]
-        if ftype == 'gz':
-            self.f = gzip.open(self.filename, 'rt' if self.read else 'wt')
-        elif ftype == 'bz2':
-            self.f = bz2.open(self.filename, 'rt' if self.read else 'wt')
-        else:
-            self.f = open(self.filename, 'r' if self.read else 'w')
-        return self.f
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.f.close()
-        return False
-
-
-class Warts:
-    def __init__(self, filename):
-        self.filename = filename
-
-    def __enter__(self):
-        ftype = self.filename.rpartition('.')[2]
-        if ftype == 'gz':
-            self.p = Popen('gzcat {} | sc_warts2json'.format(self.filename), shell=True, stdout=PIPE,
-                           universal_newlines=True)
-        elif ftype == 'bz2':
-            self.p = Popen('bzcat {} | sc_warts2json'.format(self.filename), shell=True, stdout=PIPE,
-                           universal_newlines=True)
-        else:
-            self.p = self.p = Popen('sc_warts2json {}'.format(self.filename), shell=True, stdout=PIPE,
-                                    universal_newlines=True)
-        return self.p.stdout
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.p.kill()
-        return False
-
-
-def cycle_free(trace):
-    prev = None
-    seen = set()
-    for address in trace:
-        if address and address != prev:
-            if address in seen:
-                return False
-            seen.add(address)
-            prev = address
-    return True
-
-
-def extract_trace(j):
-    trace = numpy.full(j['hop_count'], fill_value=None, dtype='object')
-    for hop in j['hops']:
-        if 'icmp_q_ttl' not in hop or hop['icmp_q_ttl'] == 1:
-            ttl = hop['probe_ttl'] - 1
-            addr = hop['addr']
-            if trace[ttl] is None:
-                trace[ttl] = addr
-            elif trace[ttl] != addr:
-                trace[ttl] = False
-    return trace
-
-
-def process_trace_file(filename):
-    addresses = set()
-    adjacencies = set()
-    with Warts(filename) as f:
-        for line in f:
-            j = json.loads(line)
-            if 'hops' in j:
-                addresses.update(hop['addr'] for hop in j['hops'])
-                if j['stop_reason'] != 'LOOP':
-                    trace = extract_trace(j)
-                    if cycle_free(trace):
-                        adjacencies.update((x, y) for x, y in zip(trace, trace[1:]) if x and y)
-    return adjacencies, addresses
-
-
-def create_adjacencies(fregex, lv=None):
+def create_adjacencies(fregex, pool=None):
     adjacencies = set()
     addresses = set()
     files = glob(fregex)
-    msg = '\r\033[K{:,d} / {:,d} ({:.2%}) Adjacencies {:,d} Addresses {:,d}'
-    if log.getEffectiveLevel() >= INFO:
-        log.info(msg.format(0, len(files), 0, 0, 0))
-    results = lv.map_async(process_trace_file, files) if lv else map(process_trace_file, files)
-    for i, (new_adjacencies, new_addresses) in enumerate(results, 1):
+    pb = Progress(len(files), 'Reading traceroutes', increment=1, callback=lambda: 'Adjacencies {:,d} Addresses {:,d}'.format(len(adjacencies), len(addresses)))
+    if pool:
+        p = create_cluster(pool)
+        dv, lv = setup_parallel()
+        with dv.sync_imports():
+            import json
+            import numpy
+        dv['Popen'] = Popen
+        dv['PIPE'] = PIPE
+        dv['Warts'] = Warts
+        dv['extract_trace'] = extract_trace
+        dv['cycle_free'] = cycle_free
+        results = lv.map_async(process_trace_file, files)
+    else:
+        results = map(process_trace_file, files)
+    for new_adjacencies, new_addresses in pb.iterator(results):
         adjacencies.update(new_adjacencies)
         addresses.update(new_addresses)
-        if log.getEffectiveLevel() >= INFO:
-            sys.stderr.write(msg.format(i, len(files), i / len(files), len(adjacencies), len(addresses)))
-    if log.getEffectiveLevel() >= INFO:
-        sys.stderr.write('\n')
+    if pool:
+        stop_cluster()
     return adjacencies, addresses
-
-
-def setup_parallel():
-    rc = Client()
-    dv = rc[:]
-    with dv.sync_imports():
-        import json
-        import numpy
-    # dv['json'] = json
-    dv['Popen'] = Popen
-    dv['PIPE'] = PIPE
-    dv['Warts'] = Warts
-    dv['extract_trace'] = extract_trace
-    dv['cycle_free'] = cycle_free
-    lv = rc.load_balanced_view()
-    return dv, lv
 
 
 def determine_otherside(address, all_interfaces):
@@ -180,7 +90,7 @@ def main():
     parser.add_argument('-a', '--adjacencies', dest='adjacencies', help='Adjacencies derived from traceroutes')
     parser.add_argument('-b', '--bgp', dest='bgp', help='BGP prefixes')
     parser.add_argument('-c', '--addresses', dest='addresses', help='List of addresses')
-    parser.add_argument('-f', '--factor', dest='factor', type=float, default='0', help='Factor used in the paper')
+    parser.add_argument('-f', '--factor', dest='factor', type=float, default=0, help='Factor used in the paper')
     parser.add_argument('-i', '--interfaces', dest='interfaces', help='Interface information')
     parser.add_argument('-o', '--as2org', dest='as2org', help='AS2ORG mappings')
     parser.add_argument('-m', '--pool', dest='pool', help='Number of processes to use')
@@ -208,14 +118,8 @@ def main():
 
     addresses = set()
 
-    if args.pool:
-        dv, lv = setup_parallel()
-    else:
-        dv = None
-        lv = None
-
     if args.traces:
-        adjacencies, addresses = create_adjacencies(args.traces, lv=lv)
+        adjacencies, addresses = create_adjacencies(args.traces, pool=args.pool)
         if args.trace_exit:
             log.info('Writing adjacencies to {}'.format(args.trace_exit))
             args.trace_exit.writelines('{}\t{}\n'.format(x, y) for x, y in sorted(adjacencies))
@@ -226,11 +130,11 @@ def main():
             sys.exit(0)
     else:
         log.info('Reading adjacencies from {}'.format(args.adjacencies))
-        with FileWrapper(args.adjacencies) as f:
+        with File2(args.adjacencies) as f:
             adjacencies = {tuple(l.split()) for l in f}
     if args.addresses:
         log.info('Reading addresses from {}'.format(args.addresses))
-        with FileWrapper(args.addresses) as f:
+        with File2(args.addresses) as f:
             addresses.update(l.strip() for l in f)
     neighbors = defaultdict(list)
     for x, y in adjacencies:
@@ -266,10 +170,10 @@ def main():
                             neighbor in asns])
     allhalves = list(halves_dict.values())
     if args.asn_providers:
-        with FileWrapper(args.providers) as f:
+        with File2(args.providers) as f:
             providers = {int(asn.strip()) for asn in f}
     elif args.org_providers:
-        with FileWrapper(args.providers) as f:
+        with File2(args.providers) as f:
             providers = {asn.strip() for asn in f}
     elif args.rel_graph:
         rels = pd.read_csv(args.rel_graph, sep='|', comment='#', names=['AS1', 'AS2', 'Rel'], usecols=[0, 1, 2])
