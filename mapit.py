@@ -12,8 +12,9 @@ import numpy
 import pandas as pd
 
 from algorithm import algorithm
+from as2org import AS2Org
 from interface_half import InterfaceHalf
-from progress import Progress
+from progress import Progress, status, finish_status
 from routing_table import create_routing_table
 from trace import Warts, extract_trace, cycle_free, process_trace_file
 from utils import File2, create_cluster, setup_parallel, stop_cluster
@@ -105,13 +106,16 @@ def main():
                         help='Extract addresses from traces and exit.')
     parser.add_argument('--interface-exit', dest='interface_exit', type=FileType('w'),
                         help='Extract interface info and exit')
+    parser.add_argument('--potaroo', dest='potaroo', action='store_true',
+                        help='Include AS identifiers and names from http://bgp.potaroo.net/cidr/autnums.html')
     parser.add_argument('--trace-exit', dest='trace_exit', type=FileType('w'),
                         help='Extract adjacencies and addresses from the traceroutes and exit')
     providers_group = parser.add_mutually_exclusive_group()
     providers_group.add_argument('-r', '--rel-graph', dest='rel_graph', help='CAIDA relationship graph')
     providers_group.add_argument('-p', '--asn-providers', dest='asn_providers', help='List of ISP ASes')
     providers_group.add_argument('-q', '--org-providers', dest='org_providers', help='List of ISP ORGs')
-    parser.add_argument('--bgp-compression', dest='bgp_compression', choices=['infer', 'gzip', 'bzip2'], default='infer', help='Compression passed to pandas read_table')
+    parser.add_argument('--bgp-compression', dest='bgp_compression', choices=['infer', 'gzip', 'bzip2'],
+                        default='infer', help='Compression passed to pandas read_table')
     args = parser.parse_args()
 
     log.setLevel(max((3 - args.verbose) * 10, 10))
@@ -146,19 +150,28 @@ def main():
     else:
         addresses = {struct.unpack("!L", socket.inet_aton(addr.strip()))[0] for addr in addresses}
         ip2as = create_routing_table(args.bgp, args.ixp_prefixes, args.ixp_asns, bgp_compression=args.bgp_compression)
-        as2org = pd.read_csv(args.as2org, index_col='ASN').Org.to_dict() if args.as2org else None
+        as2org = AS2Org(args.as2org, include_potaroo=args.potaroo)
+        status('Extracting addresses from adjacencies')
         unique_interfaces = {u for u, _ in adjacencies} | {v for _, v in adjacencies}
+        finish_status('Found {:,d}'.format(len(unique_interfaces)))
+        log.info('Mapping IP addresses to ASes.')
         asns = {}
         for address in unique_interfaces:
             asn = ip2as[address]
             if asn != -1:
                 asns[address] = asn
-        orgs = {address: as2org.get(asn, asn) for address, asn in asns.items()} if as2org else asns
+        if as2org:
+            log.info('Mapping ASes to Orgs.')
+            orgs = {address: as2org.get(asn, asn) for address, asn in asns.items()}
+        else:
+            orgs = asns
+        log.info('Determining other sides for each address (assuming point-to-point).')
         othersides = {address: determine_otherside(address, addresses) for address in asns}
         if args.interface_exit:
             df = pd.DataFrame.from_dict({'Otherside': othersides, 'ASN': asns, 'Org': orgs}).rename_axis('Address')
             df.to_csv(args.interface_exit)
             sys.exit(0)
+    log.info('Creating interface halves.')
     halves_dict = {
         (address, direction): InterfaceHalf(address, asns[address], orgs[address], direction, othersides[address])
         for (address, direction) in neighbors if address in asns

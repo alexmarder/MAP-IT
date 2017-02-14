@@ -1,5 +1,6 @@
 from itertools import chain
 import sys
+from logging import getLogger
 
 import pandas as pd
 from radix import Radix
@@ -15,10 +16,8 @@ PRIVATE6 = ['::1/128', '::/128', '::ffff:0:0/96', '64:ff9b::/96', '100::/64', '2
             '2001:db8::/32', '2002::/16', '2620:4f:8000::/48', 'fc00::/7', 'fe80::/10']
 MULTICAST4 = '224.0.0.0/3'
 MULTICAST6 = 'FF00::/8'
-bgp_files = {
-    '08-2015': 'caida/prefix2as/routeviews-rv2-20150820-1200.pfx2as.gz',
-    '03-2016': 'caida/prefix2as/routeviews-rv2-20160320-1200.pfx2as.gz'
-}
+
+log = getLogger()
 
 
 class RoutingTable(Radix):
@@ -81,6 +80,7 @@ class RoutingTable(Radix):
 
 
 def create_routing_table(bgp=None, ixp_prefixes=None, ixp_asns=None, bgp_compression='infer'):
+    log.info('Creating IP2AS tool.')
     if bgp_compression == 'infer' and bgp.startswith('http'):
         bgp_compression = infer_compression(bgp, 'infer')
     if not isinstance(ixp_prefixes, pd.DataFrame):

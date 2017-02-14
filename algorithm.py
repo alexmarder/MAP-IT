@@ -119,11 +119,12 @@ def create_rerun(updates, new_updates):
 
 
 def add_step(halves, updates, threshold):
+    previous = []
     while True:
         new_updates = add_borders(halves, updates, threshold)
         log.info('Direct: {:,d} inferences'.format(len(new_updates)))
-        if new_updates.direct == updates.direct:
-            return new_updates
+        # if new_updates.direct == updates.direct:
+        #     return new_updates
         add_othersides(new_updates)
         log.info('Indirect: {:,d} inferences'.format(len(new_updates)))
         dual_inferences(new_updates)
@@ -131,6 +132,9 @@ def add_step(halves, updates, threshold):
         inverse_inferences(new_updates)
         log.info('Inverse: {:,d} inferences'.format(len(new_updates)))
         halves = create_rerun(updates, new_updates)
+        if updates in previous:
+            return updates
+        previous.append(updates)
         updates = new_updates.copy()
 
 

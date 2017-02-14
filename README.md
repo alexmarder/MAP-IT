@@ -40,14 +40,14 @@ There are several options, some combination of which is required.
 
 ### IP2AS mappings
 - The -b <filename> option is used to supply a file of BGP prefix to AS mappings
-- The files must be in the format used by CAIDA for their pfx2AS files (NetworkAddress, Prefixlen, AS)
+- The files must be in the [format used by CAIDA](http://data.caida.org/datasets/routing/routeviews-prefix2as/README.txt) for their pfx2AS files (NetworkAddress, Prefixlen, AS)
 - The -x <filename> option is used to specify a file containing a list of ASNs used at IXPs. The prefixes that map to these ASes will be treated as IXP prefixes.
 - The -y <filename> option is used to specify a file containing a list of IXP prefixes
 - See the -i option for an alternative (as well as for use with IPv6)
 
 ### AS2ORG mappings
 - To help overcome the challenges caused by sibling ASes, mapit really uses the organization that an AS belongs to when identifying inter-AS links (more accurately inter-Org links)
-- A list of AS2ORG mappings can be supplied using the -o <filename> option
+- A list of AS2ORG mappings, in the [format used by CAIDA](http://data.caida.org/datasets/as-organizations/README.txt), can be supplied using the -o <filename> option
 - A good place to start is to use CAIDA's AS2ORG mappings based primarily on whois information
 - If the -o option is not used, the ASes will be treated as separate ORGs
 - See the -i option for an alternative
