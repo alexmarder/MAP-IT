@@ -126,7 +126,7 @@ if __name__ == '__main__':
     if args.atlas:
         from trace_atlas import TraceReader, extract_trace, cycle_free, process_trace_file
     else:
-        from trace_wrats import TraceReader, extract_trace, cycle_free, process_trace_file
+        from trace_warts import TraceReader, extract_trace, cycle_free, process_trace_file
     if args.traces:
         adjacencies, addresses = create_adjacencies(args.traces, pool=args.pool)
         if args.trace_exit:
