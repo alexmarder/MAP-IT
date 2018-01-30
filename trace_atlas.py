@@ -4,7 +4,7 @@ from subprocess import Popen, PIPE
 import numpy
 
 
-class Atlas:
+class TraceReader:
     def __init__(self, filename, json=True):
         self.filename = filename
         self.json = json
@@ -57,7 +57,7 @@ def extract_trace(hops):
 def process_trace_file(filename):
     addresses = set()
     adjacencies = set()
-    with Atlas(filename) as f:
+    with TraceReader(filename) as f:
             for trace in f:
                 if 'result' in trace:
                     for hop in trace['result']:

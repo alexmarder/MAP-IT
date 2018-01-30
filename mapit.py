@@ -16,7 +16,6 @@ from as2org import AS2Org
 from interface_half import InterfaceHalf
 from progress import Progress, status, finish_status
 from routing_table import create_routing_table
-from trace import Warts, extract_trace, cycle_free, process_trace_file
 from utils import File2, create_cluster, setup_parallel, stop_cluster
 
 PRIVATE4 = ['0.0.0.0/8', '10.0.0.8/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12',
@@ -46,7 +45,7 @@ def create_adjacencies(fregex, pool=None):
             import numpy
         dv['Popen'] = Popen
         dv['PIPE'] = PIPE
-        dv['Warts'] = Warts
+        dv['TraceReader'] = TraceReader
         dv['extract_trace'] = extract_trace
         dv['cycle_free'] = cycle_free
         results = lv.map_async(process_trace_file, files)
@@ -86,7 +85,7 @@ def determine_otherside(address, all_interfaces):
     return socket.inet_ntoa(struct.pack('!L', otherside))
 
 
-def main():
+if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('-a', '--adjacencies', dest='adjacencies', help='Adjacencies derived from traceroutes')
     parser.add_argument('-b', '--bgp', dest='bgp', help='BGP prefixes')
@@ -97,7 +96,9 @@ def main():
     parser.add_argument('-m', '--pool', dest='pool', help='Number of processes to use')
     # parser.add_argument('-p', '--asn-providers', dest='providers', help='List of ISP ASes')
     parser.add_argument('-t', '--traces', dest='traces',
-                        help='Warts traceroute files as Unix regex (can be warts.gz or warts.bz2)')
+                        help='Traceroute files as Unix regex (can be warts.gz or warts.bz2)')
+    parser.add_argument('--atlas', dest='atlas', action='store_true',
+                        help='Traceroute format is RIPE atlas json')
     parser.add_argument('-v', dest='verbose', action='count', default=0, help='Increase verbosity for each v')
     parser.add_argument('-w', '--output', dest='output', type=FileType('w'), default='-', help='Output filename')
     parser.add_argument('-x', '--ixp-asns', dest='ixp_asns', help='IXP ASNs')
@@ -122,6 +123,10 @@ def main():
 
     addresses = set()
 
+    if args.atlas:
+        from trace_atlas import TraceReader, extract_trace, cycle_free, process_trace_file
+    else:
+        from trace_wrats import TraceReader, extract_trace, cycle_free, process_trace_file
     if args.traces:
         adjacencies, addresses = create_adjacencies(args.traces, pool=args.pool)
         if args.trace_exit:
@@ -195,7 +200,3 @@ def main():
         providers = None
     updates = algorithm(allhalves, factor=args.factor, providers=providers)
     updates.write(args.output)
-
-
-if __name__ == '__main__':
-    main()

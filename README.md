@@ -28,7 +28,7 @@ There are several options, some combination of which is required.
 - Using the --trace-exit <filename> option will cause mapit to derive the adjacencies from the traces, print the adjacencies to the specified file, and exit (use - for stdout)
 - To use a precomputed set of adjacencies, use the -a <filename> option
 - mapit processes the traceroute files sequentially. On many machines it is possible for significant speed ups by processing the files in parallel. It is future work to support this in a general manner
-- Only warts, warts.gz, and warts.bzip2 are supported. To use other formats, process separately and supply a file with the adjacencies.
+- Only warts, RIPE Atlas json are supported, both could be compressed with gz or bzip2. To use other formats, process separately and supply a file with the adjacencies.
 
 ### Set of seen addresses
 - If the -t option is supplied, then mapit will create a set of seen addresses from the traceroutes
