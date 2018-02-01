@@ -4,7 +4,7 @@ from subprocess import Popen, PIPE
 import numpy
 
 
-class Warts:
+class TraceReader:
     def __init__(self, filename, json=True):
         self.filename = filename
         self.json = json
@@ -55,7 +55,7 @@ def extract_trace(j):
 def process_trace_file(filename):
     addresses = set()
     adjacencies = set()
-    with Warts(filename) as f:
+    with TraceReader(filename) as f:
         for j in f:
             if 'hops' in j:
                 addresses.update(hop['addr'] for hop in j['hops'])

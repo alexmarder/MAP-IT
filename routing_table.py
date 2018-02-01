@@ -93,7 +93,7 @@ def create_routing_table(bgp=None, ixp_prefixes=None, ixp_asns=None, bgp_compres
         bgp['ASN'] = pd.to_numeric(bgp.ASN)
     rt = RoutingTable()
     for address, prefixlen, asn in bgp[~bgp.ASN.isin(ixp_asns)].itertuples(index=False):
-        rt.add_prefix(asn.item(), address, prefixlen)
+        rt.add_prefix(asn, address, prefixlen)
     for address, prefixlen, asn in bgp[bgp.ASN.isin(ixp_asns)].itertuples(index=False):
         rt.add_ixp(address, prefixlen)
     for prefix in ixp_prefixes:
