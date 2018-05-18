@@ -1,3 +1,4 @@
+import os
 import re
 from functools import partial
 
@@ -90,25 +91,29 @@ cdef class Info:
 
 
 cdef class AS2Org(dict):
-    def __init__(self, str filename, bint include_potaroo=False, str compression='infer', str mluckie='validation-siblings.txt', *args, **kwargs):
+    def __init__(self, str filename, bint include_potaroo=False, str compression='infer', str additional='validation-siblings.txt', *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.data = {}
         ases, orgs = read_caida(filename, compression)
-        with open(mluckie) as f:
-            for line in f:
-                if line.strip() and line[0] != '#':
-                    asns = list(map(int, line.split()))
-                    for first in asns:
-                        if first in ases:
-                            asinfo = ases[first]
-                            forg = asinfo.org_id
-                            for asn in asns:
-                                old = ases[asn].asdict()
-                                if old['org_id'] != forg:
-                                    old['org_id'] = forg
-                                    old['source'] = mluckie
-                                    ases[asn] = ASInfo(**old)
-                            break
+        if additional:
+            if os.path.exists(additional):
+                with open(additional) as f:
+                    for line in f:
+                        if line.strip() and line[0] != '#':
+                            asns = list(map(int, line.split()))
+                            for first in asns:
+                                if first in ases:
+                                    asinfo = ases[first]
+                                    forg = asinfo.org_id
+                                    for asn in asns:
+                                        old = ases[asn].asdict()
+                                        if old['org_id'] != forg:
+                                            old['org_id'] = forg
+                                            old['source'] = additional
+                                            ases[asn] = ASInfo(**old)
+                                    break
+            else:
+                print('WARNING: The file {} does not exists.'.format(additional))
         for asn, asinfo in ases.items():
             self.data[asn] = Info(asinfo=asinfo, orginfo=orgs[asinfo.org_id])
         if include_potaroo:
