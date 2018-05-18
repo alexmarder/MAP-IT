@@ -193,6 +193,8 @@ def stub_heuristic(allhalves, updates, providers):
     for half in allhalves:
         # Only need to look at IHs in forward direction with a single neighbor
         if half.direction and half.num_neighbors == 1:
+            if half.address == '210.7.39.2':
+                print('here')
             # If not inference for half and it's other half
             # If it has an IP2AS mapping
             if half not in updates and half.otherhalf not in updates and half.asn != 0:
@@ -206,7 +208,7 @@ def stub_heuristic(allhalves, updates, providers):
                         updates.update(half.otherside, neighbor.asn, neighbor.org, isdirect=False, isstub=True)
 
 
-def algorithm(allhalves, factor=0.5, providers=None):
+def algorithm(allhalves, factor=0.5, providers=None, iterations=100):
     """
     The main MAP-IT algorithm, with the main loop which calls the add step and the remove step.
     :param allhalves: All InterfaceHalf objects created from the traceroutes, including those with 1 neighbor
@@ -220,8 +222,7 @@ def algorithm(allhalves, factor=0.5, providers=None):
     if not halves:
         log.warning('The interface graph is too sparse. No interface has more than one neighbor in the forward or backward direction.')
         log.warning('Only applying the stub heuristic.')
-    iteration = 0
-    while True:
+    for iteration in range(iterations):
         log.info('***** Iteration {} *****'.format(iteration))
         updates = add_step(halves, updates, factor)
         updates = remove_step(updates, factor)

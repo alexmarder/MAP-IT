@@ -1,8 +1,13 @@
 # README
-MAP-IT is a graph refinement algorithm for inferring the IP addresses used for inter-AS links from traceroute. It can be used with existing datasets and is intended to work for networks with and without traceroute vantage points. This is the code described in the paper "[MAP-IT: Multipass Accurate Passive Inferences from Traceroute](http://www.seas.upenn.edu/~amarder/aslinks.html)" [Marder and Smith IMC '16]. It was slightly modified to improve usability.
+MAP-IT is a graph refinement algorithm for inferring the IP addresses used for inter-AS links from traceroute.
+It can be used with existing datasets and is intended to work for networks with and without traceroute vantage points.
+This is the code described in the paper "[MAP-IT: Multipass Accurate Passive Inferences from Traceroute](http://www.seas.upenn.edu/~amarder/aslinks.html)" [Marder and Smith IMC '16].
+It was slightly modified to improve usability.
 
-# REQUIREMENTS
-The code was developed using python3.4. It and later versions of python are supported. There is currently no python2.* support.
+## REQUIREMENTS
+The code was developed using python3.4.
+It and later versions of python are supported.
+There is currently no python2.* support.
 
 ## Python packages:
 - py-radix (pip)
@@ -16,7 +21,8 @@ The code was developed using python3.4. It and later versions of python are supp
 # INSTRUCTIONS
 Until I create a manpage, instructions for running the code will be here.
 
-The primary file is mapit.py. It can be run using the command python3 mapit.
+The primary file is mapit.py.
+It can be run using the command python3 mapit.
 
 There are several options, some combination of which is required.
 
