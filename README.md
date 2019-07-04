@@ -1,4 +1,7 @@
 # README
+MAP-IT has been superseded by bdrmapIT, which extends MAP-IT with new heuristics adapted and generalized from bdrmap.
+That code is available at [https://alexmarder.github.io/bdrmapit/](https://alexmarder.github.io/bdrmapit/).
+
 MAP-IT is a graph refinement algorithm for inferring the IP addresses used for inter-AS links from traceroute.
 It can be used with existing datasets and is intended to work for networks with and without traceroute vantage points.
 This is the code described in the paper "[MAP-IT: Multipass Accurate Passive Inferences from Traceroute](http://www.seas.upenn.edu/~amarder/aslinks.html)" [Marder and Smith IMC '16].
